@@ -56,8 +56,13 @@ jobs:
 
       - name: Sign with debug key if unsigned
         run: |
-          APK=app/build/outputs/apk/release/app-release.apk
-          test -f "$APK"
+          APK=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -1)
+          if [ -z "$APK" ]; then
+            echo "APK tidak ditemukan. Isi outputs:"
+            find app/build/outputs -name '*.apk' 2>/dev/null || echo "(tidak ada)"
+            exit 1
+          fi
+          echo "APK: $APK"
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
           echo "$BUILD_TOOLS" > /tmp/build_tools_path
           if "$BUILD_TOOLS/apksigner" verify "$APK" 2>/dev/null; then
@@ -79,7 +84,8 @@ jobs:
 
       - name: Verify APK and create checksum
         run: |
-          APK=app/build/outputs/apk/release/app-release.apk
+          APK=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -1)
+          test -n "$APK"
           BUILD_TOOLS=$(cat /tmp/build_tools_path)
           "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -E "sdkVersion|native-code|package:" || true
           "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
