@@ -77,7 +77,7 @@ jobs:
                 -validity 10950 -dname "CN=Android Debug,O=Android,C=US"
             fi
             "$BUILD_TOOLS/apksigner" sign --ks "$DEBUG_KS" \
-              --ks-pass:pass:android --key-pass:pass:android --out /tmp/signed.apk "$APK"
+              --ks-pass android --key-pass android --out /tmp/signed.apk "$APK"
             mv /tmp/signed.apk "$APK"
             "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
           fi
