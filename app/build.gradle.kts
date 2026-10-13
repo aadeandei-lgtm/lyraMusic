@@ -58,7 +58,7 @@ android {
 
     defaultConfig {
         applicationId = "com.shnwaz.lyramusic"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 34
         versionCode = 145
         versionName = "3.0.11"
@@ -123,7 +123,7 @@ android {
     }
 
     compileOptions {
-        isCoreLibraryDesugaringEnabled = false
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
