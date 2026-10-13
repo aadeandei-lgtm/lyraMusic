@@ -83,19 +83,13 @@ android {
                 ?: ""
         buildConfigField("String", "TOGETHER_BEARER_TOKEN", "\"$togetherBearerToken\"")
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            // Default semua ABI; dengan -ParmV7aOnly hanya armeabi-v7a (tanpa splits)
+            abiFilters += if (project.hasProperty("armV7aOnly"))
+                listOf("armeabi-v7a")
+            else
+                listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         }
         buildConfigField("String", "ARCHITECTURE", "\"universal\"")
-    }
-
-    splits {
-        abi {
-            // Aktif hanya saat build Android 7 armv7a: ./gradlew :app:assembleRelease -ParmV7aOnly
-            isEnable = project.hasProperty("armV7aOnly")
-            reset()
-            include("armeabi-v7a")
-            isUniversalApk = false
-        }
     }
 
     signingConfigs {
