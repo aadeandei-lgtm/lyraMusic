@@ -40,12 +40,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Restore release signing key (jika secret ada)
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "app/$SIGNING_STORE_FILE"
-          test -s "app/$SIGNING_STORE_FILE"
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "app/$SIGNING_STORE_FILE"
+            test -s "app/$SIGNING_STORE_FILE"
+            echo "release keystore restored"
+          else
+            echo "secret RELEASE_KEYSTORE_BASE64 kosong -> lanjut tanpa signing release"
+          fi
 
       - name: Build armv7a-only release APK
         run: bash ./gradlew :app:assembleRelease -ParmV7aOnly --no-configuration-cache --stacktrace
