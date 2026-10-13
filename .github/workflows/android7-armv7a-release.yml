@@ -1,0 +1,69 @@
+name: Android 7 armv7a Release
+
+# Build release KHUSUS armeabi-v7a (Android 7, minSdk 24).
+# Sengaja TIDAK publish ke GitHub Releases dan TIDAK memakai make_latest,
+# jadi release lama (LyraMusic-foss-universal-release.apk) tidak tersentuh.
+# Hasil hanya diunggah sebagai workflow artifact.
+# releaseBuild.yml dan android7-build.yml tidak diubah.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-armv7a-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SIGNING_STORE_FILE: lyra-release.keystore
+      SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      SIGNING_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Restore release signing key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$RELEASE_KEYSTORE_BASE64"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "app/$SIGNING_STORE_FILE"
+          test -s "app/$SIGNING_STORE_FILE"
+
+      - name: Build signed armv7a-only release APK
+        run: bash ./gradlew :app:assembleRelease -ParmV7aOnly --no-configuration-cache --stacktrace
+
+      - name: Verify APK and create checksum
+        run: |
+          APK=app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+          test -f "$APK"
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -E "sdkVersion|native-code|package:" || true
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          cp "$APK" LyraMusic-android7-armv7a-release.apk
+          sha256sum LyraMusic-android7-armv7a-release.apk > LyraMusic-android7-armv7a-release.apk.sha256
+
+      - name: Upload armv7a APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LyraMusic-android7-armv7a
+          path: |
+            LyraMusic-android7-armv7a-release.apk
+            LyraMusic-android7-armv7a-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
