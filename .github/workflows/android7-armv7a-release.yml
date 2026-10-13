@@ -56,7 +56,7 @@ jobs:
 
       - name: Sign with debug key if unsigned
         run: |
-          APK=app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+          APK=app/build/outputs/apk/release/app-release.apk
           test -f "$APK"
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
           echo "$BUILD_TOOLS" > /tmp/build_tools_path
@@ -79,7 +79,7 @@ jobs:
 
       - name: Verify APK and create checksum
         run: |
-          APK=app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+          APK=app/build/outputs/apk/release/app-release.apk
           BUILD_TOOLS=$(cat /tmp/build_tools_path)
           "$BUILD_TOOLS/aapt" dump badging "$APK" | grep -E "sdkVersion|native-code|package:" || true
           "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
