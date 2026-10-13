@@ -88,6 +88,16 @@ android {
         buildConfigField("String", "ARCHITECTURE", "\"universal\"")
     }
 
+    splits {
+        abi {
+            // Aktif hanya saat build Android 7 armv7a: ./gradlew :app:assembleRelease -ParmV7aOnly
+            isEnable = project.hasProperty("armV7aOnly")
+            reset()
+            include("armeabi-v7a")
+            isUniversalApk = false
+        }
+    }
+
     signingConfigs {
         create("release") {
             if (hasReleaseSigning) {
