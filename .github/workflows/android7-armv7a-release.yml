@@ -46,9 +46,14 @@ jobs:
           if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
             printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "app/$SIGNING_STORE_FILE"
             test -s "app/$SIGNING_STORE_FILE"
-            echo "release keystore restored"
+            # pastikan keystore & password benar SEBELUM build (hemat ~5 menit kalau rusak)
+            keytool -list -keystore "app/$SIGNING_STORE_FILE" \
+              -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null
+            echo "release keystore restored & valid (alias: $SIGNING_KEY_ALIAS)"
+            echo "HAS_RELEASE_KEYSTORE=1" >> "$GITHUB_ENV"
           else
             echo "secret RELEASE_KEYSTORE_BASE64 kosong -> lanjut tanpa signing release"
+            echo "HAS_RELEASE_KEYSTORE=0" >> "$GITHUB_ENV"
           fi
 
       - name: Build armv7a-only release APK
@@ -67,8 +72,16 @@ jobs:
           echo "$BUILD_TOOLS" > /tmp/build_tools_path
           if "$BUILD_TOOLS/apksigner" verify "$APK" 2>/dev/null; then
             echo "APK sudah signed (release key)"
+          elif [ "${HAS_RELEASE_KEYSTORE:-0}" = "1" ]; then
+            echo "APK unsigned -> sign dengan RELEASE keystore"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "app/$SIGNING_STORE_FILE" \
+              --ks-pass "pass:$SIGNING_STORE_PASSWORD" \
+              --key-pass "pass:$SIGNING_KEY_PASSWORD" \
+              --out /tmp/signed.apk "$APK"
+            mv /tmp/signed.apk "$APK"
           else
-            echo "APK unsigned -> sign dengan debug key agar bisa diinstal"
+            echo "APK unsigned & tanpa release key -> sign dengan debug key agar bisa diinstal"
             DEBUG_KS="$HOME/.android/debug.keystore"
             if [ ! -f "$DEBUG_KS" ]; then
               mkdir -p "$HOME/.android"
@@ -79,8 +92,9 @@ jobs:
             "$BUILD_TOOLS/apksigner" sign --ks "$DEBUG_KS" \
               --ks-pass pass:android --key-pass pass:android --out /tmp/signed.apk "$APK"
             mv /tmp/signed.apk "$APK"
-            "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
           fi
+          # WAJIB lolos: APK harus signed di akhir langkah ini
+          "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
 
       - name: Verify APK and create checksum
         run: |
