@@ -248,7 +248,12 @@ class MusicService :
     lateinit var mediaLibrarySessionCallback: MediaLibrarySessionCallback
 
     private lateinit var audioManager: AudioManager
-    private var audioFocusRequest: AudioFocusRequest? = null
+    // AudioFocusRequest is API 26+. Keep this loosely typed so the class still verifies/link
+    // on Android 6/7 (API 23-25), where the class does not exist.
+    private var audioFocusRequest: Any? = null
+    private val legacyAudioFocusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        handleAudioFocusChange(focusChange)
+    }
     private var lastAudioFocusState = AudioManager.AUDIOFOCUS_NONE
     private var wasPlayingBeforeAudioFocusLoss = false
     private var pauseOnDeviceMuteEnabled = false
@@ -1239,6 +1244,7 @@ class MusicService :
     }
 
     private fun setupAudioFocusRequest() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(
                 android.media.AudioAttributes.Builder()
@@ -1328,22 +1334,32 @@ class MusicService :
 
     private fun requestAudioFocus(): Boolean {
         if (hasAudioFocus) return true
-    
-        audioFocusRequest?.let { request ->
-            val result = audioManager.requestAudioFocus(request)
-            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-            return hasAudioFocus
+
+        hasAudioFocus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = audioFocusRequest as? AudioFocusRequest
+            if (request == null) {
+                false
+            } else {
+                audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+        } else {
+            audioManager.requestAudioFocus(
+                legacyAudioFocusListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
-        return false
+        return hasAudioFocus
     }
 
     private fun abandonAudioFocus() {
-        if (hasAudioFocus) {
-            audioFocusRequest?.let { request ->
-                audioManager.abandonAudioFocusRequest(request)
-                hasAudioFocus = false
-            }
+        if (!hasAudioFocus) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            (audioFocusRequest as? AudioFocusRequest)?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            audioManager.abandonAudioFocus(legacyAudioFocusListener)
         }
+        hasAudioFocus = false
     }
 
     fun hasAudioFocusForPlayback(): Boolean {
