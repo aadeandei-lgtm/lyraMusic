@@ -95,9 +95,9 @@ class LyricsHelper
 
             // Masukkan job ini ke single-flight SEBELUM fetch, supaya call paralel
             // untuk lagu yang sama menunggu hasil yang sama, bukan fetch ganda.
-            // coroutineScope memberi scope pada async (standalone async deprecated).
+            // Receiver coroutineScope adalah CoroutineScope -> async memakai extension.
             val fetchDeferred = kotlinx.coroutines.coroutineScope {
-                kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+                async(kotlinx.coroutines.Dispatchers.IO) {
                     doFetchLyrics(mediaMetadata, preferredProviderOnly)
                 }
             }
