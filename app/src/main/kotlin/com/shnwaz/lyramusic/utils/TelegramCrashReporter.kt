@@ -9,7 +9,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object TelegramCrashReporter {
-    private const val BOT_TOKEN = "8652158842:AAG3KHeNp6mMyuANYji23H5-hujmWI3hsNo"
+    // Token dipindah dari hardcode ke BuildConfig, diisi dari CI secret LYRA_BOT_TOKEN
+    private val BOT_TOKEN: String get() = BuildConfig.LYRA_BOT_TOKEN
     private const val CHAT_ID = "-1003003858404"
     private const val TOPIC_ID = 137
 

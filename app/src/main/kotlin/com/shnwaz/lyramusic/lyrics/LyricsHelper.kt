@@ -56,6 +56,11 @@ class LyricsHelper
         private val cache = LruCache<String, List<LyricsResult>>(MAX_CACHE_SIZE)
         private val singleLyricsCache = LruCache<String, String>(MAX_CACHE_SIZE)
 
+        // Single-flight: lagu yang sedang di-fetch dipakai bersama, tidak dobel.
+        // Disinkronkan karena getLyrics dipanggil dari Main dan IO secara paralel.
+        private val inFlight = mutableMapOf<String, kotlinx.coroutines.Deferred<String>>()
+        private val inFlightLock = Object()
+
         suspend fun getLyrics(
             mediaMetadata: MediaMetadata,
             preferredProviderOnly: Boolean = false,
@@ -75,8 +80,45 @@ class LyricsHelper
                     GlobalLog.append(Log.DEBUG, "LyricsHelper", "Found lyrics in cache for ${mediaMetadata.title}")
                     return cached.lyrics
                 }
+
+                // Dedupe: kalau ada fetch yang sama sedang berjalan, ikut hasilnya.
+                // Ambil deferred di dalam lock, tapi await DI LUAR lock biar tidak
+                // menahan call paralel lain selama menunggu hasil.
+                val reuse: kotlinx.coroutines.Deferred<String>? = synchronized(inFlightLock) {
+                    inFlight[cacheKey]
+                }
+                if (reuse != null) {
+                    GlobalLog.append(Log.DEBUG, "LyricsHelper", "Reusing in-flight lyrics fetch for ${mediaMetadata.title}")
+                    return reuse.await()
+                }
             }
 
+            // Masukkan job ini ke single-flight SEBELUM fetch, supaya call paralel
+            // untuk lagu yang sama menunggu hasil yang sama, bukan fetch ganda.
+            val fetchDeferred = kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+                doFetchLyrics(mediaMetadata, preferredProviderOnly)
+            }
+            synchronized(inFlightLock) {
+                inFlight[cacheKey] = fetchDeferred
+            }
+            val lyrics = try {
+                fetchDeferred.await()
+            } finally {
+                synchronized(inFlightLock) {
+                    inFlight.remove(cacheKey)
+                }
+            }
+            if (isMeaningfulLyrics(lyrics)) {
+                singleLyricsCache.put(cacheKey, lyrics)
+            }
+
+            return lyrics
+        }
+
+        private suspend fun doFetchLyrics(
+            mediaMetadata: MediaMetadata,
+            preferredProviderOnly: Boolean,
+        ): String {
             GlobalLog.append(
                 Log.DEBUG,
                 "LyricsHelper",
@@ -99,12 +141,7 @@ class LyricsHelper
 
             val ordered = orderedProviders().filter { it.isEnabled(context) }
             val providers = if (preferredProviderOnly) ordered.take(1) else ordered
-            val lyrics = fetchPriorityLyrics(providers, mediaMetadata)
-            if (isMeaningfulLyrics(lyrics)) {
-                singleLyricsCache.put(cacheKey, lyrics)
-            }
-
-            return lyrics
+            return fetchPriorityLyrics(providers, mediaMetadata)
         }
 
         suspend fun getAllLyrics(

@@ -63,6 +63,8 @@ jobs:
 
       - name: Build armv7a release
         run: bash ./gradlew :app:assembleRelease -ParmV7aOnly --no-configuration-cache --stacktrace
+        env:
+          LYRA_BOT_TOKEN: ${{ secrets.LYRA_BOT_TOKEN }}
 
       - name: Sign ulang dengan v1+v2+v3 (release key)
         run: |

@@ -60,7 +60,7 @@ android {
         applicationId = "com.shnwaz.lyramusic"
         minSdk = 24
         targetSdk = 34
-        versionCode = 145
+        versionCode = 146
         versionName = "3.0.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -82,6 +82,12 @@ android {
                 ?: System.getenv("TOGETHER_BEARER_TOKEN")
                 ?: ""
         buildConfigField("String", "TOGETHER_BEARER_TOKEN", "\"$togetherBearerToken\"")
+
+        val lyraBotToken =
+            localProperties.getProperty("LYRA_BOT_TOKEN")
+                ?: System.getenv("LYRA_BOT_TOKEN")
+                ?: ""
+        buildConfigField("String", "LYRA_BOT_TOKEN", "\"$lyraBotToken\"")
         ndk {
             // Default semua ABI; dengan -ParmV7aOnly hanya armeabi-v7a (tanpa splits)
             abiFilters += if (project.hasProperty("armV7aOnly"))
