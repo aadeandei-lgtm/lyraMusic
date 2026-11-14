@@ -295,12 +295,21 @@ class App : Application(), SingletonImageLoader.Factory {
             applicationScope.launch(Dispatchers.IO) { trimImageDiskCache(diskCache) }
         }
 
-        return ImageLoader.Builder(this)
-            .crossfade(true)
+        val lowRam = com.shnwaz.lyramusic.utils.DeviceRam.isLowRam(this)
+
+        val builder = ImageLoader.Builder(this)
+            .crossfade(!lowRam)
             .allowHardware(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
             .diskCache(diskCache)
             .diskCachePolicy(imageCacheConfig.policy)
-            .build()
+        if (lowRam) {
+            builder.memoryCache(
+                coil3.memory.MemoryCache.Builder()
+                    .maxSizeBytes(com.shnwaz.lyramusic.utils.DeviceRam.memoryCacheBytes())
+                    .build()
+            )
+        }
+        return builder.build()
     }
 
     private fun trimImageDiskCache(diskCache: DiskCache) {
