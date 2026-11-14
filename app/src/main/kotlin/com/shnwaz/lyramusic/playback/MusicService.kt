@@ -4739,8 +4739,11 @@ class MusicService :
                     ObjectOutputStream(fos).use { output ->
                         output.writeObject(payload)
                         output.flush()
+                        // fsync MUST run while fos is still open: the outer use{} closes it,
+                        // and sync() on a closed fd throws SyncFailedException (EBADF) -> the
+                        // temp file is deleted and the queue/state is never persisted.
+                        fos.fd.sync()
                     }
-                    fos.fd.sync()
                 }
 
                 if (persistentFile.exists() && !persistentFile.delete()) {
