@@ -60,7 +60,7 @@ android {
         applicationId = "com.shnwaz.lyramusic"
         minSdk = 24
         targetSdk = 34
-        versionCode = 146
+        versionCode = 147
         versionName = "3.0.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

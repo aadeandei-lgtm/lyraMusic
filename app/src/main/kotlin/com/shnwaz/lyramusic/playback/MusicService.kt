@@ -636,16 +636,17 @@ class MusicService :
             reportException(e)
         }
 
-        val lowRam = com.shnwaz.lyramusic.utils.DeviceRam.isLowRam(this)
-
+        // Edisi suara 3.0.9: buffer ExoPlayer dikembalikan ke nilai asli
+        // (15s/50s + prioritize time) — tanpa pemangkasan low-RAM, agar
+        // perilaku buffering persis seperti v3.0.9.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                if (lowRam) 10_000 else 15_000,
-                if (lowRam) 30_000 else 50_000,
+                15_000,
+                50_000,
                 1_000,
                 2_000
             )
-            .setPrioritizeTimeOverSizeThresholds(!lowRam)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         player =
