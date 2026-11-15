@@ -619,7 +619,7 @@ fun BottomSheetPlayer(
                         true
                     }
                     Key.DirectionUp -> {
-                        playerConnection.service.playerVolume.value = (playerConnection.service.playerVolume.value + 0.05f).coerceAtMost(1f)
+                        playerConnection.service.playerVolume.value = (playerConnection.service.playerVolume.value + 0.05f).coerceAtMost(2f)
                         true
                     }
                     Key.DirectionDown -> {

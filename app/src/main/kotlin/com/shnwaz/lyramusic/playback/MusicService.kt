@@ -220,6 +220,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
 import timber.log.Timber
 import android.app.NotificationChannel
@@ -270,6 +271,7 @@ class MusicService :
     private val binder = MusicBinder()
     private var hasBoundClients = false
     private var idleStopJob: Job? = null
+    private var driftFixJob: Job? = null
 
     private lateinit var connectivityManager: ConnectivityManager
     lateinit var connectivityObserver: NetworkConnectivityObserver
@@ -428,6 +430,10 @@ class MusicService :
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    // Volume > 100%: bagian di atas 1.0 diterapkan sebagai gain LoudnessEnhancer
+    // (pola SmartTube VolumeBooster), bukan lewat player.volume yang di-cap 1.
+    private var volumeBoostGainMb = 0
+    private var lastAppliedLoudnessGainMb = 0
 
     private var discordRpc: DiscordRPC? = null
     private var lastDiscordUpdateTime = 0L
@@ -620,6 +626,7 @@ class MusicService :
     override fun onCreate() {
         super.onCreate()
         ensureScopesActive()
+        startLoudnessDriftFix()
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -720,7 +727,7 @@ class MusicService :
         scope.launch(Dispatchers.IO) {
             val prefs = dataStore.data.first()
             val repeatMode = prefs[RepeatModeKey] ?: REPEAT_MODE_OFF
-            val volume = (prefs[PlayerVolumeKey] ?: 1f).coerceIn(0f, 1f)
+            val volume = (prefs[PlayerVolumeKey] ?: 1f).coerceIn(0f, 2f)
             val offload = prefs[AudioOffload] ?: false
             withContext(Dispatchers.Main) {
                 player.repeatMode = repeatMode
@@ -747,10 +754,16 @@ class MusicService :
             }
         }
 
-        combine(playerVolume, normalizeFactor, audioFocusVolumeFactor, playbackFadeFactor) { playerVolume, normalizeFactor, audioFocusVolumeFactor, playbackFadeFactor ->
-            playerVolume * normalizeFactor * audioFocusVolumeFactor * playbackFadeFactor
-        }.collectLatest(scope) { finalVolume ->
-            player.volume = finalVolume
+        combine(playerVolume, normalizeFactor, audioFocusVolumeFactor, playbackFadeFactor) { userVolume, normalizeFactor, audioFocusVolumeFactor, playbackFadeFactor ->
+            userVolume to (userVolume * normalizeFactor * audioFocusVolumeFactor * playbackFadeFactor)
+        }.collectLatest(scope) { (userVolume, finalVolume) ->
+            // Volume > 100%: player.volume di-cap 1, sisanya jadi gain LoudnessEnhancer
+            // (pola SmartTube VolumeBooster) — track pelan tetap bisa dibuat keras.
+            player.volume = finalVolume.coerceIn(0f, 1f)
+            volumeBoostGainMb = if (userVolume > 1f) {
+                (20 * Math.log10(userVolume * 3.0) * 100).roundToInt().coerceIn(0, 1500)
+            } else 0
+            updateLoudnessEnhancer()
         }
 
         playerVolume.debounce(1000).collect(ioScope) { volume ->
@@ -3558,11 +3571,47 @@ class MusicService :
             runCatching { v.setStrength(settings.virtualizerStrength.toShort()) }
         }
 
-        loudnessEnhancer?.let { le ->
-            val gainMb = if (settings.outputGainEnabled) settings.outputGainMb.coerceIn(-1500, 1500) else 0
-            runCatching { le.setTargetGain(gainMb) }
-            runCatching { le.enabled = settings.outputGainEnabled }
+        // LoudnessEnhancer: gabungan output-gain EQ + volume boost (>100%)
+        updateLoudnessEnhancer()
+    }
+
+    /**
+     * DRIFT FIX (diadopsi dari SmartTube VolumeBooster): kompresor internal AOSP
+     * LoudnessEnhancer (le_fx::AdaptiveDynamicRangeCompression) mengakumulasi gain
+     * error secara multiplikatif — gain melorot pelan-pelan selama sesi panjang.
+     * Re-apply target gain memicu reset state kompresor. Dijalankan tiap 5 menit.
+     */
+    private fun startLoudnessDriftFix() {
+        driftFixJob?.cancel()
+        driftFixJob = scope.launch {
+            while (isActive) {
+                delay(5 * 60 * 1000L)
+                val gain = lastAppliedLoudnessGainMb
+                if (gain != 0) {
+                    loudnessEnhancer?.let { le ->
+                        runCatching { le.setTargetGain(gain) }
+                        Timber.tag("LoudnessEnhancer").d("Drift fix: re-applied target gain $gain mB")
+                    }
+                }
+            }
         }
+    }
+
+    private fun updateLoudnessEnhancer() {
+        val le = loudnessEnhancer ?: return
+        val settings = desiredEqSettings.value
+        val eqGainMb = if (settings.outputGainEnabled) settings.outputGainMb.coerceIn(-1500, 1500) else 0
+        val boostMb = if (isMultichannelAudio()) 0 else volumeBoostGainMb
+        val totalGainMb = (eqGainMb + boostMb).coerceIn(-1500, 1500)
+        val enabled = totalGainMb != 0
+        runCatching { le.setTargetGain(totalGainMb) }
+        runCatching { le.enabled = enabled }
+        if (enabled) lastAppliedLoudnessGainMb = totalGainMb
+    }
+
+    private fun isMultichannelAudio(): Boolean {
+        // Audio 5.1+ tidak bisa di-boost (LoudnessEnhancer: "format isn't supported")
+        return runCatching { (player.audioFormat?.channelCount ?: 0) > 2 }.getOrDefault(false)
     }
 
     private fun openAudioEffectSession() {
@@ -4857,6 +4906,7 @@ class MusicService :
 
     override fun onDestroy() {
         super.onDestroy()
+        driftFixJob?.cancel()
         unregisterBluetoothReceiver()
         try {
             scope.launch { stopTogetherInternal() }

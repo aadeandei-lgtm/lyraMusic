@@ -783,7 +783,7 @@ private fun PlayerVolumeCard(
     onVolumeChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val safeVolume = volume.coerceIn(0f, 1f)
+    val safeVolume = volume.coerceIn(0f, 2f)
     var previousVolume by remember { mutableFloatStateOf(0.5f) }
 
     // Mute state derived from actual volume
@@ -880,7 +880,7 @@ private fun VolumeSliderL(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val safeValue = value.coerceIn(0f, 1f)
+    val safeValue = value.coerceIn(0f, 2f)
     var sliderValue by remember { mutableFloatStateOf(safeValue) }
     var isDragging by remember { mutableStateOf(false) }
 
@@ -892,12 +892,12 @@ private fun VolumeSliderL(
         value = sliderValue,
         onValueChange = { updated ->
             isDragging = true
-            val coerced = updated.coerceIn(0f, 1f)
+            val coerced = updated.coerceIn(0f, 2f)
             sliderValue = coerced
             onValueChange(coerced)
         },
         onValueChangeFinished = { isDragging = false },
-        valueRange = 0f..1f,
+        valueRange = 0f..2f,
         modifier = modifier.height(36.dp),
         thumb = {
             Box(

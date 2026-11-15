@@ -34,7 +34,7 @@ fun BigSeekBar(
     Slider(
         value = progressProvider(),
         onValueChange = onProgressChange,
-        valueRange = 0f..1f,
+        valueRange = 0f..2f,
         steps = steps,
         colors = PlayerSliderColors.standardSliderColors(color),
         thumb = {
